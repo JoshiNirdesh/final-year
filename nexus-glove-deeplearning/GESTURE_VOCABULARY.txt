@@ -1,0 +1,57 @@
+###############################################################################
+#             NEXUS GLOVE - FULL GESTURE VOCABULARY (40 WORDS)                #
+###############################################################################
+
+PART 1: THE ESSENTIALS (1-20)
+Focus: Survival, basic needs, and immediate response.
+01. OPEN          - Neutral State: Hand flat, fingers straight and spread. (Baseline)
+02. YES           - Fist Nod: Make a fist and tilt the wrist up and down.
+03. NO            - Snap: Index and middle fingers snap down to touch the thumb.
+04. HELLO         - Salute: Flat hand starts at the temple and moves out to the side.
+05. THANK YOU     - Chin Out: Touch chin with flat hand, move it forward and down.
+06. PLEASE        - Chest Circle: Flat hand held upright, moving in a circular motion.
+07. HELP          - Thumbs Up: Make a fist with the thumb up, move the hand upwards.
+08. WATER         - "W" to Chin: Index, middle, ring fingers up; tap index to chin.
+09. FOOD          - Tap Mouth: Fingers all touching thumb (O-shape), tap your lips.
+10. TOILET        - "T" Shake: Thumb tucked between index/middle finger, shake fist.
+11. SICK          - Touch Head: Middle finger bent forward, touch your forehead.
+12. PAIN          - Twist: Point index fingers toward each other and "twist" hands.
+13. STOP          - Flat Down: Flat hand moves down sharply like a chop.
+14. GO            - Point: Index finger points and hand moves away from body.
+15. ME            - Point Self: Index finger points directly to your chest.
+16. YOU           - Point Forward: Index finger points directly at the person.
+17. GOOD          - Thumb Up: Standard "Thumbs up" held steady.
+18. BAD           - Pinky Out: Make a fist but keep the pinky finger pointed up.
+19. WANT          - Claw Pull: Fingers slightly bent, palms up, pulling toward self.
+20. MORE          - Tap Together: Bring all fingertips together and tap them.
+
+
+-------------------------------------------------------------------------------
+
+PART 2: EXPANSION (21-40)
+Focus: Emotions, people, and daily life context.
+
+21. MOTHER        - Chin Tap: Open hand, thumb taps the chin.
+22. FATHER        - Head Tap: Open hand, thumb taps the forehead.
+23. BROTHER       - Hat Pull: Thumb and index "pull" imaginary cap brim at forehead.
+24. SISTER        - Chin Pull: Same as brother, but at the chin.
+25. HOME          - Cheek Tap: Fingers together, tap chin then tap upper cheek.
+26. SCHOOL        - Clap: Flat hand "claps" against the palm (or held flat).
+27. WORK          - Hammer: Two fists tapping each other (or fist tapping palm).
+28. TIME          - Wrist Tap: Index finger taps the top of the wrist (watch area).
+29. TODAY         - Now Down: "Y" hand shape (thumb/pinky out) moving down twice.
+30. NOW           - Single Drop: "Y" hand shape drops down once firmly.
+31. HAPPY         - Chest Swipe: Flat hand brushes upward against chest twice.
+32. SAD           - Face Drop: Fingers spread in front of face, dropping down slowly.
+33. ANGRY         - Claw Face: Claw hand pulls upward from stomach toward face.
+34. SCARED        - Chest Block: Both hands (or one) open wide in front of chest.
+35. HOT           - Breath Blow: Hand in "C" shape near mouth, rotate outward.
+36. COLD          - Shiver: Fists closed, arms/hands shaking near the chest.
+37. BIG           - Space Out: Hands move far apart from each other.
+38. SMALL         - Pinch: Thumb and index finger held close together.
+39. LIKE          - Heart Pull: Middle finger and thumb "pinch" and pull from chest.
+40. SORRY         - Fist Circle: Closed fist moving in a circle over the heart.
+
+###############################################################################
+# TRAINING TIP: Record at least 300-500 frames per word for high accuracy.    #
+###############################################################################

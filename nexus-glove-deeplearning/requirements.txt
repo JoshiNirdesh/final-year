@@ -1,0 +1,19 @@
+# Nexus Glove: Deep Learning Requirements
+
+# Data Processing & Math
+numpy
+pandas
+
+# Machine Learning (Neural Networks)
+scikit-learn
+joblib
+
+# Visualization
+matplotlib
+seaborn
+
+# Hardware & Interface
+pyserial
+pyttsx3
+flask
+flask-cors

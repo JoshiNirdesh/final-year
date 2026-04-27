@@ -1,0 +1,6 @@
+{
+  "name": "NeuroGlove AI Dashboard",
+  "description": "Next-gen real-time gesture recognition interface for sensor-embedded smart gloves with AI-powered visualization and speech synthesis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

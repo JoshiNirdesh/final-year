@@ -1,0 +1,50 @@
+#include <Wire.h>
+
+const int MPU_ADDR = 0x68; 
+int16_t AcX, AcY, AcZ;
+
+const int FLEX_PINS[] = {A0, A1, A2, A3, A4};
+
+void setup() {
+  // UPGRADED BAUD: 115200 for zero-latency
+  Serial.begin(115200);
+  
+  Wire.begin();
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(0x6B); 
+  Wire.write(0);    
+  Wire.endTransmission(true);
+  
+  for(int i=0; i<5; i++) pinMode(FLEX_PINS[i], INPUT);
+}
+
+void loop() {
+  // 1. Read Flex
+  int f[5];
+  for(int i=0; i<5; i++) f[i] = analogRead(FLEX_PINS[i]);
+
+  // 2. Read RAW MPU6050 (High Precision)
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(0x3B); 
+  Wire.endTransmission(false);
+  Wire.requestFrom(MPU_ADDR, 6, true); 
+  
+  AcX = Wire.read()<<8 | Wire.read();     
+  AcY = Wire.read()<<8 | Wire.read(); 
+  AcZ = Wire.read()<<8 | Wire.read(); 
+
+  // NOTE: We no longer divide by 100. 
+  // We send the FULL precision to Python.
+
+  // 3. Output CSV
+  for(int i=0; i<5; i++) {
+    Serial.print(f[i]);
+    Serial.print(",");
+  }
+  Serial.print(AcX); Serial.print(",");
+  Serial.print(AcY); Serial.print(",");
+  Serial.println(AcZ);
+
+  // High speed sampling
+  delay(10); 
+}

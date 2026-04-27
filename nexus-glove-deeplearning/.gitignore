@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+
+# macOS
+.DS_Store
+
+# ML Models (Ignore trained weights, keep the scripts)
+*.pkl
+hand_profile.json
+
+# Reports/Images
+*.png
+*.jpg
+*.jpeg
+
+# IDEs
+.vscode/
+.idea/
+
+# Note: We are NOT ignoring gesture_data.csv so that you can share it easily.
+# If it gets too large (>100MB), you should add it here.
