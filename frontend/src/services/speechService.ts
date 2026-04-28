@@ -45,7 +45,7 @@ class SpeechService {
     const lowerText = text.toLowerCase();
     
     // Handle neutral gesture as a reset
-    if (lowerText === 'open' || lowerText === 'waiting...' || lowerText === 'idle') {
+    if (lowerText === 'open' || lowerText === 'waiting...' || lowerText === 'idle' || lowerText === 'searching...') {
       this.reset();
       return;
     }

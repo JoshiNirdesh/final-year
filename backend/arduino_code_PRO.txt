@@ -6,7 +6,7 @@ int16_t AcX, AcY, AcZ;
 const int FLEX_PINS[] = {A0, A1, A2, A3, A4};
 
 void setup() {
-  // UPGRADED BAUD: 115200 for zero-latency
+  // Set baud rate to 9600
   Serial.begin(115200);
   
   Wire.begin();

@@ -12,6 +12,12 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from features import EMAFilter, extract_features
 import config
+import warnings
+
+# Suppress annoying math warnings from Scikit-Learn MLP
+warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*matmul.*")
+warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*overflow.*")
+warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*divide by zero.*")
 
 # --- Setup Logging ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
@@ -28,6 +34,11 @@ latest_data = {
     "confidence": 0.0,
     "status": "disconnected"
 }
+
+# Stability Window for Web HUD
+import collections
+prediction_history = collections.deque(maxlen=config.STABILITY_WINDOW)
+current_stable_gesture = "Idle"
 
 # Calibration State
 offsets = {"ax": 0.0, "ay": 0.0, "az": 0.0}
@@ -48,16 +59,13 @@ def find_arduino_port():
             
     # 2. Manual Fallback
     if not ports: return None
-    print("\n⚠️  Dashboard API: Glove not found automatically. Select manually:")
+    logger.warning("Glove not found automatically. Available ports:")
     for i, p in enumerate(ports):
-        print(f"  [{i}] {p.device}")
-    try:
-        # Note: Since this runs in a thread, input() might be tricky, 
-        # but for a local dev setup it works.
-        idx = int(input("Select index: "))
-        return ports[idx].device
-    except:
-        return None
+        logger.warning(f"  [{i}] {p.device}")
+    
+    # In a non-interactive server, we cannot use input(). 
+    # We will just return None and let the user plug it in or configure it.
+    return None
 
 def load_model():
     global pipeline, le
@@ -132,7 +140,7 @@ def read_serial_loop():
             # 2. Smooth
             smoothed = ema.filter(raw_vals)
             
-            # 3. Predict (Pure Deep Learning - No Buffer)
+            # 3. Predict & Filter with Stability Window
             if pipeline:
                 X = extract_features(smoothed).reshape(1, -1)
                 probs = pipeline.predict_proba(X)[0]
@@ -140,11 +148,22 @@ def read_serial_loop():
                 
                 if max_prob >= config.CONFIDENCE_THRESHOLD:
                     pred_idx = np.argmax(probs)
-                    latest_data["gesture"] = le.inverse_transform([pred_idx])[0]
-                    latest_data["confidence"] = float(max_prob)
+                    prediction = le.inverse_transform([pred_idx])[0]
+                    prediction_history.append(prediction)
                 else:
-                    # Optional: reset gesture if low confidence, or keep last
-                    pass
+                    prediction_history.append("Waiting...")
+                
+                # Voting logic
+                if len(prediction_history) > 0:
+                    most_common, count = collections.Counter(prediction_history).most_common(1)[0]
+                    if count >= config.STABILITY_THRESHOLD:
+                        global current_stable_gesture
+                        current_stable_gesture = most_common
+                        latest_data["gesture"] = current_stable_gesture
+                        latest_data["confidence"] = float(max_prob)
+                    else:
+                        # Keep current gesture, just update confidence if it's the same
+                        latest_data["confidence"] = float(max_prob)
 
             latest_data["flex"] = [round(f, 1) for f in smoothed[0:5]]
             latest_data["acc"] = [round(a, 2) for a in smoothed[5:8]]
@@ -160,6 +179,33 @@ def read_serial_loop():
 @app.route("/predict", methods=["GET"])
 def get_predict():
     return jsonify(latest_data)
+
+@app.route("/train", methods=["POST"])
+def save_samples():
+    try:
+        data = request.json
+        samples = data.get("samples", [])
+        if not samples:
+            return jsonify({"error": "No samples provided"}), 400
+        
+        file_exists = os.path.exists(config.CSV_FILE) and os.path.getsize(config.CSV_FILE) > 0
+        
+        with open(config.CSV_FILE, "a", newline="") as f:
+            writer = csv.writer(f)
+            # Ensure header if file is empty
+            if not file_exists:
+                writer.writerow(["f1", "f2", "f3", "f4", "f5", "ax", "ay", "az", "label"])
+            
+            for s in samples:
+                # Expects s to have 'flex' (list of 5) and 'acc' (list of 3) and 'label' (string)
+                row = s["flex"] + s["acc"] + [s["label"]]
+                writer.writerow(row)
+        
+        logger.info(f"📥 Saved {len(samples)} new samples to {config.CSV_FILE}")
+        return jsonify({"message": f"Successfully saved {len(samples)} samples."})
+    except Exception as e:
+        logger.error(f"❌ Error saving samples: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/recalibrate", methods=["POST"])
 def trigger_recalibration():

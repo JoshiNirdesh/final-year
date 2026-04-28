@@ -4,7 +4,7 @@ import joblib
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.model_selection import train_test_split, GridSearchCV, StratifiedKFold
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.preprocessing import RobustScaler, LabelEncoder
 from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import classification_report, confusion_matrix
@@ -17,7 +17,20 @@ import os
 DATA_PATH = "gesture_data.csv"
 print(f"🚀 Loading data from {DATA_PATH}...")
 try:
-    df = pd.read_csv(DATA_PATH, header=None)
+    # Try reading with header first; if it fails or has junk, we'll handle it
+    # Try reading with header first
+    df = pd.read_csv(DATA_PATH)
+    
+    # If the first column is numeric (even as a string), it's likely a data row, not a header
+    def is_numeric(s):
+        try:
+            float(s)
+            return True
+        except:
+            return False
+
+    if is_numeric(df.columns[0]):
+        df = pd.read_csv(DATA_PATH, header=None)
 except Exception as e:
     print(f"❌ Error loading CSV: {e}")
     exit()
@@ -28,7 +41,6 @@ df = df.drop_duplicates()
 print(f"🧹 Removed {initial_count - len(df)} duplicate rows.")
 
 # Extract raw X and y
-# Assuming columns 0-7 are sensors, column 8 is the label
 X_raw = df.iloc[:, 0:8].values   
 y_raw = df.iloc[:, 8].to_numpy(dtype=str)
 
@@ -42,12 +54,14 @@ print(f"🏷️  Classes detected: {list(le.classes_)}")
 print("⚖️  Balancing and Augmenting dataset for Neural Network...")
 
 def balance_and_augment(df_raw):
-    counts = df_raw[8].value_counts()
+    # Use iloc to be index-agnostic
+    labels = df_raw.iloc[:, 8]
+    counts = labels.value_counts()
     target_count = counts.max()
     
     balanced_dfs = []
     for label in counts.index:
-        label_df = df_raw[df_raw[8] == label]
+        label_df = df_raw[df_raw.iloc[:, 8] == label]
         if len(label_df) < target_count:
             label_df = resample(label_df, replace=True, n_samples=target_count, random_state=42)
         balanced_dfs.append(label_df)
@@ -75,29 +89,41 @@ feature_names = get_feature_names()
 print(f"📊 Final Dataset: {len(X_aug)} samples, {X_aug.shape[1]} features.")
 
 # ── 4. BUILD NEURAL NETWORK PIPELINE ──────────────────────
-# MLPClassifier requires scaling (StandardScaler) for convergence
+# MLPClassifier requires scaling (RobustScaler) for convergence
 pipeline = Pipeline([
-    ('scaler', StandardScaler()),
+    ('scaler', RobustScaler()),
     ('mlp', MLPClassifier(
+        hidden_layer_sizes=(128, 64),
+        activation='tanh', # Tanh is often more stable than ReLU for this kind of data
+        alpha=0.1,         # Stronger regularization
+        learning_rate_init=0.0005,
         max_iter=1000, 
         random_state=42, 
         early_stopping=True,
-        validation_fraction=0.1
+        validation_fraction=0.1,
+        solver='adam'
     ))
 ])
 
+import warnings
+
 # ── 5. HYPERPARAMETER TUNING ──────────────────────────────
-# Tuning layers, activation, and alpha (regularization)
+# Suppress annoying matmul warnings from Scikit-Learn's MLP globally
+warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*matmul.*")
+warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*overflow.*")
+warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*divide by zero.*")
+
 param_grid = {
-    'mlp__hidden_layer_sizes': [(128, 64, 32), (64, 64, 64), (100, 50)],
-    'mlp__activation': ['relu', 'tanh'],
-    'mlp__alpha': [0.0001, 0.001, 0.01, 0.1],
-    'mlp__learning_rate_init': [0.001, 0.005]
+    'mlp__hidden_layer_sizes': [(128, 64), (64, 64, 64)],
+    'mlp__activation': ['tanh'], 
+    'mlp__alpha': [0.1, 0.5, 1.0],
+    'mlp__learning_rate_init': [0.0005, 0.001]
 }
 
 print("\n🧠 Training Neural Network with GridSearchCV...")
-cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-grid_search = GridSearchCV(pipeline, param_grid, cv=cv, n_jobs=-1, verbose=1)
+# n_jobs=1 ensures warnings are filtered correctly and stability is easier to monitor
+cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
+grid_search = GridSearchCV(pipeline, param_grid, cv=cv, n_jobs=1, verbose=1)
 grid_search.fit(X_aug, y_aug)
 
 best_pipeline = grid_search.best_estimator_

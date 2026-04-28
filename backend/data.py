@@ -92,18 +92,49 @@ base_ax, base_ay, base_az = 0.0, 0.0, 0.0
 calib_count = 0
 ser.reset_input_buffer()
 
+start_time = time.time()
 while calib_count < config.CALIBRATION_SAMPLES:
-    line = ser.readline().decode('utf-8', errors='ignore').strip()
-    if not line: continue
-    values = line.split(",")
-    if len(values) >= 8 and all(is_float(v.strip()) for v in values[:8]):
-        base_ax += float(values[5]); base_ay += float(values[6]); base_az += float(values[7])
-        calib_count += 1
+    elapsed = time.time() - start_time
+    if elapsed > 15:
+        print(f"\n❌ Calibration Timed Out after {elapsed:.1f}s!")
+        print("📡 Resource Status: Port open, but no valid CSV lines received.")
+        print("👉 Check your connection and try again.")
+        sys.exit()
 
-base_ax /= float(config.CALIBRATION_SAMPLES)
-base_ay /= float(config.CALIBRATION_SAMPLES)
-base_az /= float(config.CALIBRATION_SAMPLES)
-print(f"🎯 Calibration Complete: [{base_ax:.1f}, {base_ay:.1f}, {base_az:.1f}]")
+    try:
+        if ser.in_waiting == 0:
+            time.sleep(0.01)
+            continue
+
+        line = ser.readline().decode('utf-8', errors='ignore').strip()
+        if not line: continue
+        
+        # DEBUG: Print the first few lines to see what we're getting
+        if calib_count == 0:
+            print(f"DEBUG: Raw line received: '{line}'")
+
+        values = [v.strip() for v in line.split(",") if v.strip()]
+        if len(values) >= 8:
+            try:
+                numeric_vals = [float(v) for v in values[:8]]
+                base_ax += numeric_vals[5]; base_ay += numeric_vals[6]; base_az += numeric_vals[7]
+                calib_count += 1
+                if calib_count % 5 == 0:
+                    print(f"  📥 Progress: {calib_count}/{config.CALIBRATION_SAMPLES} samples", end="\r")
+            except ValueError:
+                continue
+    except Exception as e:
+        print(f"\n⚠️ Read error: {e}")
+        time.sleep(0.1)
+
+if calib_count > 0:
+    base_ax /= float(calib_count)
+    base_ay /= float(calib_count)
+    base_az /= float(calib_count)
+    print(f"\n🎯 Calibration Complete: Offsets [{base_ax:.1f}, {base_ay:.1f}, {base_az:.1f}]")
+else:
+    print("\n❌ Calibration failed: No valid data.")
+    sys.exit()
 
 while True:
     print("\n" + "="*50)
@@ -122,14 +153,35 @@ while True:
     start_time = time.time()
     record_count = 0
     
+    # Ensure file has header if empty
+    file_exists = os.path.exists(config.CSV_FILE) and os.path.getsize(config.CSV_FILE) > 0
+    
     with open(config.CSV_FILE, "a", newline="") as f:
         writer = csv.writer(f)
+        if not file_exists:
+            writer.writerow(["f1", "f2", "f3", "f4", "f5", "ax", "ay", "az", "label"])
+        
+        loop_start = time.time()
+        last_data_time = time.time()
+        
         while record_count < REQUIRED_FRAMES:
+            # Safety timeout for the entire gesture recording (60s)
+            if time.time() - loop_start > 60:
+                print("\n⚠️ Recording took too long. Possible connection issue.")
+                break
+
+            if ser.in_waiting == 0:
+                time.sleep(0.005)
+                if time.time() - last_data_time > 2.0:
+                    print(f"\r⚠️ Waiting for data... (check glove connection)", end="", flush=True)
+                continue
+
             line = ser.readline().decode('utf-8', errors='ignore').strip()
             if not line: continue
             
-            values = line.split(",")
-            if len(values) >= 8 and all(is_float(v.strip()) for v in values[:8]):
+            values = [v.strip() for v in line.split(",") if v.strip()]
+            if len(values) >= 8 and all(is_float(v) for v in values[:8]):
+                last_data_time = time.time()
                 row = [
                     float(values[0]), float(values[1]), float(values[2]), float(values[3]), float(values[4]),
                     round(float(values[5]) - base_ax, 1),
@@ -140,9 +192,12 @@ while True:
                 writer.writerow(row)
                 record_count += 1
                 
+                if record_count % 10 == 0:
+                    hz = record_count / (time.time() - loop_start)
+                    print(f"\rRecording... {record_count}/{REQUIRED_FRAMES} | Speed: {hz:.1f} Hz   ", end="", flush=True)
+                
                 if record_count % 50 == 0:
-                    hz = record_count / (time.time() - start_time)
-                    print(f"Recording... {record_count}/{REQUIRED_FRAMES} | Speed: {hz:.1f} Hz", end="\r")
+                    f.flush()
     
     # 🔔 End Beep
     print("\a", end="")

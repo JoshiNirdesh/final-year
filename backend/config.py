@@ -3,7 +3,7 @@ Central Configuration for Nexus Glove System
 """
 
 # --- Serial Connection ---
-SERIAL_BAUD = 115200
+SERIAL_BAUD = 9600
 # Possible names for Arduino serial ports on Mac/Linux/Windows
 PORT_SEARCH_KEYWORDS = ["usb", "serial", "ch340", "cp210x", "arduino", "ttyUSB", "ttyACM"]
 
@@ -11,7 +11,9 @@ PORT_SEARCH_KEYWORDS = ["usb", "serial", "ch340", "cp210x", "arduino", "ttyUSB",
 MODEL_FILE = "gesture_pipeline.pkl"
 LABEL_ENCODER_FILE = "label_encoder.pkl"
 CSV_FILE = "gesture_data.csv"
-CONFIDENCE_THRESHOLD = 0.90  # Relying purely on AI confidence score
+CONFIDENCE_THRESHOLD = 0.85  # Slightly lowered to allow stable predictions to take over
+STABILITY_WINDOW = 10        # Number of frames to check for consistency
+STABILITY_THRESHOLD = 7      # Minimum number of consistent frames required
 
 # --- Interface ---
 REPEAT_DELAY = 3.0           # Seconds before repeating the same gesture
@@ -22,4 +24,4 @@ NEUTRAL_GESTURE = "open"
 
 # --- Calibration ---
 CALIBRATION_SAMPLES = 30
-EMA_ALPHA = 0.3              # Smoothing factor (0=no change, 1=no smoothing)
+EMA_ALPHA = 0.2              # More smoothing (lower = smoother)

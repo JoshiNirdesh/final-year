@@ -10,6 +10,12 @@ import json
 from features import EMAFilter, extract_features
 import config
 import sys
+import warnings
+
+# Suppress annoying math warnings from Scikit-Learn MLP
+warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*matmul.*")
+warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*overflow.*")
+warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*divide by zero.*")
 
 # For terminal UI
 def clear_console():
@@ -80,6 +86,10 @@ class NexusGlovePredictor:
         self.last_spoken_gesture = None
         self.last_spoken_time = 0
         
+        # Stability Buffer
+        self.prediction_history = collections.deque(maxlen=config.STABILITY_WINDOW)
+        self.current_stable_gesture = "Waiting..."
+        
         self.load_model()
 
     def load_model(self):
@@ -104,7 +114,7 @@ class NexusGlovePredictor:
     def connect_serial(self):
         port = find_arduino_port()
         if not port:
-            logger.warning("Searching for glove... Please ensure it is plugged in.")
+            logger.warning("Waiting for glove... Please ensure it is plugged in.")
             return False
             
         try:
@@ -124,27 +134,60 @@ class NexusGlovePredictor:
             return False
 
     def calibrate(self):
-        logger.info("Calibrating... Keep hand still in neutral position.")
+        logger.info(f"⏳ Calibrating... Keep hand still in neutral position ({config.CALIBRATION_SAMPLES} samples)")
         time.sleep(1)
         
         c_ax, c_ay, c_az = 0.0, 0.0, 0.0
         count = 0
         self.ser.reset_input_buffer()
         
+        start_time = time.time()
+        logger.info("📡 Waiting for serial data stream...")
+        
         while count < config.CALIBRATION_SAMPLES:
+            # Timeout after 15 seconds to avoid infinite hang
+            elapsed = time.time() - start_time
+            if elapsed > 15:
+                logger.error(f"❌ Calibration Timed Out after {elapsed:.1f}s! No data received.")
+                logger.error("👉 Please check your Arduino connection and Serial Monitor.")
+                break
+
+            # Check if there's data waiting to avoid blocking hangs
+            if self.ser.in_waiting == 0:
+                time.sleep(0.1)
+                continue
+
             try:
                 line = self.ser.readline().decode('utf-8', errors='ignore').strip()
-                if not line: continue
-                val = [float(v.strip()) for v in line.split(",") if v.strip()]
-                if len(val) >= 8:
-                    c_ax += val[5]; c_ay += val[6]; c_az += val[7]
-                    count += 1
-            except: continue
+                if not line: 
+                    continue
+                
+                parts = [p.strip() for p in line.split(",") if p.strip()]
+                # We expect 8 values: F1,F2,F3,F4,F5,AccX,AccY,AccZ
+                if len(parts) >= 8:
+                    try:
+                        val = [float(p) for p in parts]
+                        c_ax += val[5]; c_ay += val[6]; c_az += val[7]
+                        count += 1
+                        if count % 5 == 0:
+                            logger.info(f"  📥 Progress: {count}/{config.CALIBRATION_SAMPLES} samples")
+                    except ValueError:
+                        logger.debug(f"Skipping non-numeric line: {line}")
+                else:
+                    # Only log this occasionally to avoid spamming
+                    if int(elapsed) % 5 == 0:
+                        logger.warning(f"⚠️  Data format mismatch: Expected 8+ cols, got {len(parts)} ({line})")
+            except Exception as e:
+                logger.error(f"⚠️  Serial read error: {e}")
+                time.sleep(0.5)
             
-        self.base_ax = c_ax / config.CALIBRATION_SAMPLES
-        self.base_ay = c_ay / config.CALIBRATION_SAMPLES
-        self.base_az = c_az / config.CALIBRATION_SAMPLES
-        logger.info(f"🎯 Accel Calibration Complete: Offsets [{self.base_ax:.1f}, {self.base_ay:.1f}, {self.base_az:.1f}]")
+        if count > 0:
+            self.base_ax = c_ax / count
+            self.base_ay = c_ay / count
+            self.base_az = c_az / count
+            logger.info(f"🎯 Accel Calibration Complete: Offsets [{self.base_ax:.1f}, {self.base_ay:.1f}, {self.base_az:.1f}]")
+        else:
+            logger.error("❌ Calibration failed. Check if Arduino is sending data in CSV format.")
 
     def run(self):
         print(f"\n{'='*50}")
@@ -181,14 +224,26 @@ class NexusGlovePredictor:
                     max_prob = np.max(probs)
                     pred_idx = np.argmax(probs)
                     prediction = self.le.inverse_transform([pred_idx])[0]
-                    
+ 
                     frame_count += 1
                     hz = frame_count / (time.time() - start_time)
-
+ 
+                    # --- Stability & Confidence Logic ---
                     if max_prob < config.CONFIDENCE_THRESHOLD:
-                        current_gesture = "Searching..."
+                        self.prediction_history.append("Waiting...")
                     else:
-                        current_gesture = prediction
+                        self.prediction_history.append(prediction)
+                    
+                    # Determine the most frequent prediction in the window
+                    most_common, count = collections.Counter(self.prediction_history).most_common(1)[0]
+                    
+                    if count >= config.STABILITY_THRESHOLD:
+                        current_gesture = most_common
+                    else:
+                        # Keep the previous stable gesture if the current window isn't confident
+                        current_gesture = self.current_stable_gesture
+ 
+                    self.current_stable_gesture = current_gesture
                     
                     # --- Activation Logic ---
                     if current_gesture == config.START_GESTURE and not self.voice_active:
@@ -212,9 +267,9 @@ class NexusGlovePredictor:
                     print(f"AI Prediction: \033[92m{current_gesture.upper()}\033[0m ({max_prob*100:.1f}%)")
                     print(f"Inference: {hz:.1f} Hz | Status: {'🔊 ACTIVE' if self.voice_active else '🔇 STANDBY'}")
                     print(f"{'='*40}")
-
+ 
                     # --- Speaking Logic ---
-                    if self.voice_active and current_gesture not in [config.START_GESTURE, config.END_GESTURE, "Searching...", config.NEUTRAL_GESTURE]:
+                    if self.voice_active and current_gesture not in [config.START_GESTURE, config.END_GESTURE, "Waiting...", config.NEUTRAL_GESTURE]:
                         now = time.time()
                         if (current_gesture != self.last_spoken_gesture) or (now - self.last_spoken_time > config.REPEAT_DELAY):
                             self.speak(current_gesture)
